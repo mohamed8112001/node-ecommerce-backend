@@ -2,6 +2,8 @@ const asyncHandler = require("express-async-handler");
 
 var slugify = require("slugify");
 const ProductModel = require("../models/Product");
+const UserModel = require("../models/User");
+
 
 exports.CreateProduct = asyncHandler(
   asyncHandler(async (req, res) => {
@@ -56,3 +58,29 @@ exports.DeleteProduct = asyncHandler(async(req,res)=>{
     }
     res.status(200).json({msg:`Done Delete product for this id ${id}`})
 })
+
+exports.search = asyncHandler(async (req, res) => {
+  const { keyword } = req.query;
+
+  if (!keyword) return res.status(400).json({ msg: "Please provide search keyword" });
+
+  const productsByName = await ProductModel.find({
+    $text: { $search: keyword }
+  }).populate("seller", "name");
+
+  const sellers = await UserModel.find({
+    name: { $regex: keyword, $options: "i" }
+  });
+
+  const sellerIds = sellers.map(s => s._id);
+
+  const productsBySeller = await ProductModel.find({
+    seller: { $in: sellerIds }
+  }).populate("seller", "name");
+
+  const allProducts = [...productsByName, ...productsBySeller];
+
+  const uniqueProducts = Array.from(new Map(allProducts.map(p => [p._id.toString(), p])).values());
+
+  res.status(200).json({ data: uniqueProducts });
+});
